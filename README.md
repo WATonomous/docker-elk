@@ -6,6 +6,8 @@
 
 Run the latest version of the [Elastic stack][elk-stack] with Docker and Docker Compose.
 
+This is a fork of the [docker-elk](https://github.com/deviantony/docker-elk) template.
+
 It gives you the ability to analyze any data set by using the searching/aggregation capabilities of Elasticsearch and
 the visualization power of Kibana.
 
@@ -65,6 +67,7 @@ own_. [sherifabdlnaby/elastdocker][elastdocker] is one example among others of p
    * [How to scale out the Elasticsearch cluster](#how-to-scale-out-the-elasticsearch-cluster)
    * [How to re-execute the setup](#how-to-re-execute-the-setup)
    * [How to reset a password programmatically](#how-to-reset-a-password-programmatically)
+    * [Another way to reset a password programmatically](#another-way-to-reset-a-password-programmatically)
 1. [Extensibility](#extensibility)
    * [How to add plugins](#how-to-add-plugins)
    * [How to enable the provided extensions](#how-to-enable-the-provided-extensions)
@@ -73,6 +76,7 @@ own_. [sherifabdlnaby/elastdocker][elastdocker] is one example among others of p
    * [How to enable a remote JMX connection to a service](#how-to-enable-a-remote-jmx-connection-to-a-service)
 1. [Going further](#going-further)
    * [Plugins and integrations](#plugins-and-integrations)
+1. [ELK Docs (Reference)](#elk-documentation)
 
 ## Requirements
 
@@ -80,6 +84,7 @@ own_. [sherifabdlnaby/elastdocker][elastdocker] is one example among others of p
 
 * [Docker Engine][docker-install] version **18.06.0** or newer
 * [Docker Compose][compose-install] version **1.26.0** or newer (including [Compose V2][compose-v2])
+  * Means that `docker compose <command>` and `docker-compose <command>` are both supported
 * 1.5 GB of RAM
 
 > **Warning**  
@@ -126,8 +131,11 @@ instructions from the [documentation][mac-filesharing] to add more locations.
 
 ### Bringing up the stack
 
-Clone this repository onto the Docker host that will run the stack, then start the stack's services locally using Docker
-Compose:
+> **Note**  
+> Make sure to add the Docker-ELK `.env` file from the WATO 1Password into the root 
+> directory of this repo before starting any services.
+
+Clone this repository onto the Docker host that will run the stack, add the the Docker-ELK `.env` file from the WATO 1Password into the root directory of this repo, and then start the stack's services locally using Docker Compose:
 
 ```console
 $ docker-compose up
@@ -140,11 +148,11 @@ Give Kibana about a minute to initialize, then access the Kibana web UI by openi
 browser and use the following (default) credentials to log in:
 
 * user: *elastic*
-* password: *changeme*
+* password: *password for the `elastic` user from the `.env` file*
 
 > **Note**  
 > Upon the initial startup, the `elastic`, `logstash_internal` and `kibana_system` Elasticsearch users are intialized
-> with the values of the passwords defined in the [`.env`](.env) file (_"changeme"_ by default). The first one is the
+> with the values of the passwords defined in the [`.env`](.env) file. The first one is the
 > [built-in superuser][builtin-users], the other two are used by Kibana and Logstash respectively to communicate with
 > Elasticsearch. This task is only performed during the _initial_ startup of the stack. To change users' passwords
 > _after_ they have been initialized, please refer to the instructions in the next section.
@@ -158,55 +166,6 @@ browser and use the following (default) credentials to log in:
 
 > **Warning**  
 > Starting with Elastic v8.0.0, it is no longer possible to run Kibana using the bootstraped privileged `elastic` user.
-
-The _"changeme"_ password set by default for all aforementioned users is **unsecure**. For increased security, we will
-reset the passwords of all aforementioned Elasticsearch users to random secrets.
-
-1. Reset passwords for default users
-
-    The commands below reset the passwords of the `elastic`, `logstash_internal` and `kibana_system` users. Take note
-    of them.
-
-    ```console
-    $ docker-compose exec elasticsearch bin/elasticsearch-reset-password --batch --user elastic
-    ```
-
-    ```console
-    $ docker-compose exec elasticsearch bin/elasticsearch-reset-password --batch --user logstash_internal
-    ```
-
-    ```console
-    $ docker-compose exec elasticsearch bin/elasticsearch-reset-password --batch --user kibana_system
-    ```
-
-    If the need for it arises (e.g. if you want to [collect monitoring information][ls-monitoring] through Beats and
-    other components), feel free to repeat this operation at any time for the rest of the [built-in
-    users][builtin-users].
-
-1. Replace usernames and passwords in configuration files
-
-    Replace the password of the `elastic` user inside the `.env` file with the password generated in the previous step.
-    Its value isn't used by any core component, but [extensions](#how-to-enable-the-provided-extensions) use it to
-    connect to Elasticsearch.
-
-    > **Note**  
-    > In case you don't plan on using any of the provided [extensions](#how-to-enable-the-provided-extensions), or
-    > prefer to create your own roles and users to authenticate these services, it is safe to remove the
-    > `ELASTIC_PASSWORD` entry from the `.env` file altogether after the stack has been initialized.
-
-    Replace the password of the `logstash_internal` user inside the `.env` file with the password generated in the
-    previous step. Its value is referenced inside the Logstash pipeline file (`logstash/pipeline/logstash.conf`).
-
-    Replace the password of the `kibana_system` user inside the `.env` file with the password generated in the previous
-    step. Its value is referenced inside the Kibana configuration file (`kibana/config/kibana.yml`).
-
-    See the [Configuration](#configuration) section below for more information about these configuration files.
-
-1. Restart Logstash and Kibana to re-connect to Elasticsearch using the new passwords
-
-    ```console
-    $ docker-compose up -d logstash kibana
-    ```
 
 > **Note**  
 > Learn more about the security of the Elastic stack at [Secure the Elastic Stack][sec-cluster].
@@ -360,6 +319,14 @@ docker-elk-setup-1 exited with code 0
 
 ### How to reset a password programmatically
 
+> **Note**  
+> If you want to change the passwords for the ELK stack users, make sure to update
+> the `.env` file in the WATO 1Password.
+
+> **Note**  
+> Before changing the passwords for the ELK stack users, be sure to
+> have a good reason to do so, and let someone on the infra team know about it as well.
+
 If for any reason your are unable to use Kibana to change the password of your users (including [built-in
 users][builtin-users]), you can use the Elasticsearch API instead and achieve the same result.
 
@@ -371,6 +338,64 @@ $ curl -XPOST -D- 'http://localhost:9200/_security/user/elastic/_password' \
     -u elastic:<your current elastic password> \
     -d '{"password" : "<your new password>"}'
 ```
+
+### Another way to reset a password programmatically:
+
+> **Note**  
+> If you want to change the passwords for the ELK stack users, make sure to update
+> the `.env` file in the WATO 1Password.
+
+> **Note**  
+> Before changing the passwords for the ELK stack users, be sure to
+> have a good reason to do so, and let someone on the infra team know about it as well.
+
+If for any reason your are unable to use Kibana to change the password of your users (including [built-in
+users][builtin-users]), you can use the Elasticsearch API instead and achieve the same result.
+
+1. Reset passwords for default users
+
+    The commands below reset the passwords of the `elastic`, `logstash_internal` and `kibana_system` users. Take note
+    of them.
+
+    ```console
+    $ docker-compose exec elasticsearch bin/elasticsearch-reset-password --batch --user elastic
+    ```
+
+    ```console
+    $ docker-compose exec elasticsearch bin/elasticsearch-reset-password --batch --user logstash_internal
+    ```
+
+    ```console
+    $ docker-compose exec elasticsearch bin/elasticsearch-reset-password --batch --user kibana_system
+    ```
+
+    If the need for it arises (e.g. if you want to [collect monitoring information][ls-monitoring] through Beats and
+    other components), feel free to repeat this operation at any time for the rest of the [built-in
+    users][builtin-users].
+
+1. Replace usernames and passwords in configuration files
+
+    Replace the password of the `elastic` user inside the `.env` file with the password generated in the previous step.
+    Its value isn't used by any core component, but [extensions](#how-to-enable-the-provided-extensions) use it to connect to Elasticsearch. **Make sure to update the `.env` file for the Docker-ELK repo in the WATO 1Password too!**
+
+    > **Note**  
+    > In case you don't plan on using any of the provided [extensions](#how-to-enable-the-provided-extensions), or
+    > prefer to create your own roles and users to authenticate these services, it is safe to remove the
+    > `ELASTIC_PASSWORD` entry from the `.env` file altogether after the stack has been initialized.
+
+    Replace the password of the `logstash_internal` user inside the `.env` file with the password generated in the
+    previous step. Its value is referenced inside the Logstash pipeline file (`logstash/pipeline/logstash.conf`).
+
+    Replace the password of the `kibana_system` user inside the `.env` file with the password generated in the previous
+    step. Its value is referenced inside the Kibana configuration file (`kibana/config/kibana.yml`).
+
+    See the [Configuration](#configuration) section for more information about these configuration files.
+
+1. Restart Logstash and Kibana to re-connect to Elasticsearch using the new passwords
+
+    ```console
+    $ docker-compose up -d logstash kibana
+    ```
 
 ## Extensibility
 
@@ -445,6 +470,19 @@ See the following Wiki pages:
 
 * [External applications](https://github.com/deviantony/docker-elk/wiki/External-applications)
 * [Popular integrations](https://github.com/deviantony/docker-elk/wiki/Popular-integrations)
+
+## ELK Documentation
+
+See the following documentation pages for some extra info about the ELK stack:
+
+* [Elasticsearch docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/elasticsearch-intro.html)
+    * [Elasticsearch setup](https://www.elastic.co/guide/en/elasticsearch/reference/current/setup.html)
+* [Logstash docs](https://www.elastic.co/guide/en/logstash/current/introduction.html)
+    * [Logstash setup](https://www.elastic.co/guide/en/logstash/current/setup-logstash.html)
+* [Kibana docs](https://www.elastic.co/guide/en/kibana/current/introduction.html)
+    * [Kibana setup](https://www.elastic.co/guide/en/kibana/current/setup.html)
+* [Filebeat docs](https://www.elastic.co/guide/en/beats/filebeat/current/filebeat-overview.html)
+    * [Filebeat setup](https://www.elastic.co/guide/en/beats/filebeat/current/filebeat-installation-configuration.html)
 
 [elk-stack]: https://www.elastic.co/what-is/elk-stack
 [subscriptions]: https://www.elastic.co/subscriptions
